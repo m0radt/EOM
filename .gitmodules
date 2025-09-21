@@ -1,3 +1,0 @@
-[submodule "third_party/evalplus"]
-	path = third_party/evalplus
-	url = https://github.com/evalplus/evalplus.git
