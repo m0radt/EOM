@@ -51,8 +51,8 @@ def split_and_save(
     with open(test_file, "w") as f:
         json.dump(sorted(test_ids, key=lambda x: int(x.split("/")[1])), f, indent=2)
 
-    print(f"Saved {len(val_ids)} val IDs to {val_file}")
-    print(f"Saved {len(test_ids)} test IDs to {test_file}")
+    print(f"\nSaved {len(val_ids)} val IDs to {val_file}")
+    print(f"Saved {len(test_ids)} test IDs to {test_file}\n")
 
 if __name__ == "__main__":
     import argparse
