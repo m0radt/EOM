@@ -12,6 +12,8 @@ tree_sitter>=0.22.0
 tree-sitter-python
 datasets
 psutil
+scikit-learn
+accelerate
 
 # vllm
 vllm
