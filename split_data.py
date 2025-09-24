@@ -62,7 +62,7 @@ if __name__ == "__main__":
     p.add_argument("--split_ratio", type=float, default=0.8)
     p.add_argument("--val_size", type=int, default=None,
                    help="Number of tasks for validation (overrides split_ratio if set)")
-    p.add_argument("--seed", type=int, default=42)
+    p.add_argument("--seed", type=int, default=42, help="Random seed (default: 42)")
     p.add_argument("--mini", action="store_true")
     p.add_argument("--noextreme", action="store_true")
     p.add_argument("--version", default="default")
