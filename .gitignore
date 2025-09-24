@@ -183,7 +183,6 @@ evalplus_results/
 
 # EMO specific
 plot_results.py
-evaluate.py
 calculate_metrics.py
 calculate_perplexity.py
 
