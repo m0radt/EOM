@@ -34,20 +34,22 @@ def split_and_save(
     val_ids = task_ids[:cut]
     test_ids = task_ids[cut:]
 
-    # 🔹 Sort each split before writing
-    val_ids = sorted(val_ids, key=lambda x: int(x.split("/")[1]))
-    test_ids = sorted(test_ids, key=lambda x: int(x.split("/")[1]))
+    assert len(val_ids) + len(test_ids) == len(task_ids), "Split sizes do not add up"
 
     out_prefix = Path(out_prefix)
     out_prefix.parent.mkdir(parents=True, exist_ok=True)
-
+    
     val_file = out_prefix.with_name(out_prefix.stem + "_val_ids.json")
     test_file = out_prefix.with_name(out_prefix.stem + "_test_ids.json")
 
+    if val_file.exists() and test_file.exists():
+        print(f"Split already exists: {val_file}, {test_file} → skipping.")
+        return
+    
     with open(val_file, "w") as f:
-        json.dump(val_ids, f, indent=2)
+        json.dump(sorted(val_ids, key=lambda x: int(x.split("/")[1])), f, indent=2)
     with open(test_file, "w") as f:
-        json.dump(test_ids, f, indent=2)
+        json.dump(sorted(test_ids, key=lambda x: int(x.split("/")[1])), f, indent=2)
 
     print(f"Saved {len(val_ids)} val IDs to {val_file}")
     print(f"Saved {len(test_ids)} test IDs to {test_file}")
