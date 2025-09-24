@@ -182,7 +182,6 @@ evalplus.github.io
 evalplus_results/
 
 # EMO specific
-read.py
 plot_results.py
 evaluate.py
 calculate_metrics.py
