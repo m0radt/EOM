@@ -72,7 +72,6 @@ if __name__ == "__main__":
 
     responses = load_llm_responses(os.path.join(args.root, args.dataset, identifier+".jsonl"))
     print(f"Loaded {len(responses)} responses from {args.validation_ids_path}")
-    print(responses[:2])
     model_embedding = compute_model_embedding(responses)
     save_embedding(model_embedding, identifier, args.embedding_dir)
     
