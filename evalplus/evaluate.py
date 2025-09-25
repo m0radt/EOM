@@ -139,6 +139,8 @@ def evaluate(
     output_file: Optional[str] = None,
     gguf_file: Optional[str] = None,
     num_ctx: Optional[int] = None,
+    subset_path: Optional[str] = None, # New argument to filter problems
+    root: str = "evalplus_results", # root directory to save results
     **model_kwargs,
 ):
     if model_kwargs:
@@ -151,6 +153,8 @@ def evaluate(
             dataset=dataset,
             gguf_file=gguf_file,
             num_ctx=num_ctx,
+            root=root,
+            subset_path=subset_path,
             **model_kwargs,
         )
     assert samples is not None, "No samples provided"
@@ -184,17 +188,23 @@ def evaluate(
             dataset_hash = get_human_eval_plus_hash(
                 mini=mini, noextreme=noextreme, version=version
             )
-            expected_output = get_groundtruth(problems, dataset_hash, [])
+
         elif dataset == "mbpp":
             problems = get_mbpp_plus(mini=mini, noextreme=noextreme, version=version)
             dataset_hash = get_mbpp_plus_hash(
                 mini=mini, noextreme=noextreme, version=version
             )
-            expected_output = get_groundtruth(
-                problems,
-                dataset_hash,
-                MBPP_OUTPUT_NOT_NONE_TASKS,
-            )
+
+        # filter by subset_path
+        if subset_path:
+            with open(subset_path) as f:
+                ids = json.load(f)
+                if not isinstance(ids, list):
+                    ids = [ids]
+            filtered = {k: v for k, v in problems.items() if k in ids}
+            problems = filtered
+
+        expected_output = get_groundtruth(problems, dataset_hash, [] if dataset=="humaneval" else MBPP_OUTPUT_NOT_NONE_TASKS)   
 
         results = {
             "date": datetime.now().strftime("%Y-%m-%d %H:%M"),

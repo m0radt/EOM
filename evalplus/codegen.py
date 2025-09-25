@@ -142,6 +142,7 @@ def run_codegen(
     dtype: str = "bfloat16",
     gptqmodel_backend: str = "auto",  # For GPTQModel
     gguf_file: Optional[str] = None,
+    subset_path: Optional[str] = None,
 ):
     assert dataset in ["humaneval", "mbpp", "evalperf"], f"Invalid dataset {dataset}"
     assert evalperf_type is None or evalperf_type in [
@@ -171,6 +172,14 @@ def run_codegen(
         assert id_range is None, "id_range not supported for evalperf"
     else:
         raise ValueError(f"Invalid dataset {dataset}")
+    
+    if subset_path:
+        with open(subset_path) as f:
+            ids = json.load(f)
+            if not isinstance(ids, list):
+                ids = [ids]
+        filtered = {k: v for k, v in dataset_dict.items() if k in ids}
+        dataset_dict = filtered
 
     all_tasks_complete = False
     if jsonl_fmt and os.path.isfile(target_path):
