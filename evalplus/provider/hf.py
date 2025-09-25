@@ -28,7 +28,7 @@ class HuggingFaceDecoder(DecoderBase):
         kwargs = {
             "device_map": device_map,
             "trust_remote_code": self.trust_remote_code,
-            "torch_dtype": getattr(torch, self.dtype),
+            "dtype": getattr(torch, self.dtype),
             "attn_implementation": attn_implementation,  # "eager", "flash_attention_2", "sdpa"
             "gguf_file": gguf_file,
         }
@@ -44,6 +44,9 @@ class HuggingFaceDecoder(DecoderBase):
         if gguf_file is not None:
             tokenizer_kwargs["gguf_file"] = gguf_file
         self.tokenizer = AutoTokenizer.from_pretrained(name, **tokenizer_kwargs)
+        # Make sure we have a pad token to avoid generate() complaints/padding issues
+        if self.tokenizer.pad_token_id is None and self.tokenizer.eos_token_id is not None:
+            self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
         if self.is_direct_completion():  # no chat template
             self.eos += extra_eos_for_direct_completion(dataset)
         else:  # with chat template
@@ -72,16 +75,24 @@ class HuggingFaceDecoder(DecoderBase):
                 prompt, self.instruction_prefix, self.response_prefix, self.tokenizer
             )
         )
-        input_tokens = self.tokenizer.encode(prompt, return_tensors="pt")
-        if self.device_map is None:
-            input_tokens.to(self.device)
+        # Build full inputs (with attention mask) and move them to the *model's* device.
+        # When device_map != None (e.g., "auto"), rely on .generate handling,
+        # but inputs still must live on the same primary device as the first layer shards.
+        model_device = getattr(self.model, "device", next(self.model.parameters()).device)
+        inputs = self.tokenizer(
+            prompt,
+            return_tensors="pt",
+            padding=False,
+            truncation=False,
+        )
+        inputs = {k: v.to(model_device) for k, v in inputs.items()}
         kwargs = {}
         if do_sample:
             kwargs["top_p"] = 0.95
             kwargs["temperature"] = self.temperature
 
         outputs = self.model.generate(
-            input_tokens,
+            **inputs,
             max_new_tokens=self.max_new_tokens,
             do_sample=do_sample,
             num_return_sequences=min(self.batch_size, num_samples),
@@ -91,8 +102,10 @@ class HuggingFaceDecoder(DecoderBase):
             **kwargs,
         )
 
+        # Compute the number of prompt tokens for slicing decoded strings.
+        prompt_len = inputs["input_ids"].size(-1)
         gen_strs = self.tokenizer.batch_decode(
-            outputs[:, input_tokens.size(-1) :],
+            outputs[:, prompt_len:],
             skip_special_tokens=self.skip_special_tokens,
         )
         outputs = []
