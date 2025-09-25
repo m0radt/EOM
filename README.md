@@ -53,7 +53,7 @@ echo hf_XXXXXXXXXXXXXXXXXXXXXXXX > ~/.hf_token
 python split_data.py \
   --dataset humaneval \
   --out_prefix splits/humaneval_split \
-  --val_size 10 \
+  --val_size 100 \
   --seed 42
 ```
 
@@ -65,7 +65,11 @@ splits/humaneval_split_test_ids.json
 
 **Format example (`*_ids.json`)**
 ```json
-["HumanEval/0", "HumanEval/3", "HumanEval/17"]
+[
+  "HumanEval/0",
+  "HumanEval/3",
+  "HumanEval/17"
+]
 ```
 
 > ⚠️ Must be **JSON arrays**, not JSONL. Each entry should be a full task ID (e.g., `"HumanEval/0"`).
@@ -74,7 +78,7 @@ splits/humaneval_split_test_ids.json
 
 ## 4) Submit jobs for each model (SLURM array)
 
-Use `my_job_array.sh` to (a) generate & evaluate on the validation subset, (b) compute the model embedding, and (c) (optionally) run ensemble selection.
+Use `my_job_array.sh` to (a) generate & evaluate on the validation subset and (b) compute the model embedding.
 
 ### `my_job_array.sh`
 ```bash
@@ -110,7 +114,7 @@ optional_flags=${models_and_settings[$((i + 3))]}
 
 temperature=0.0
 dataset=humaneval
-val_size=10
+val_size=100
 random_seed=42
 
 validation_ids_path="splits/${dataset}_split_val_ids.json"
@@ -138,7 +142,6 @@ except Exception as e:
     print("HF login skipped or failed:", e)
 PY
 
-nvidia-smi
 
 # 1) Create/overwrite splits (id files are JSON arrays)
 python split_data.py \
@@ -158,14 +161,6 @@ python embed_model.py \
   --root $validation_root \
   $optional_flags
 
-# 3) Optional: run ensemble selection after each model (see also: dependency method below)
-python ensemble_select.py \
-  --embeddings_dir $embedding_dir \
-  --strategy cluster_representatives \
-  --distance cosine \
-  --k 5 \
-  --output ensembles/selected.json
-```
 
 ### Submit the array
 
@@ -204,7 +199,6 @@ tail -f job-<JOBID>.out
 
 ## 6) Ensemble selection (manual run)
 
-If you don’t call it inside the array job:
 
 ```bash
 python ensemble_select.py \
@@ -242,54 +236,12 @@ You already have `...temp_<T>.jsonl` under `--root`. To force new generations, e
 - change `--root`, or
 - change `--temperature` (affects the filename/identifier).
 
-**“No valid response field found in entry.”**  
-If your generator wrote `solution` but your loader expects `response`, make the loader tolerant (recommended) or patch the JSONL once. Example tolerant loader:
-
-```python
-def load_llm_responses(results_path):
-    import json
-    out = []
-    with open(results_path) as f:
-        for line in f:
-            if not line.strip(): continue
-            obj = json.loads(line)
-            val = (
-                obj.get("response")
-                or obj.get("solution")
-                or (obj.get("responses")[0] if isinstance(obj.get("responses"), list) and obj["responses"] else None)
-                or obj.get("text") or obj.get("output")
-            )
-            if not isinstance(val, str) or not val:
-                raise ValueError(f"No valid response in entry. Keys: {list(obj.keys())}")
-            out.append(val)
-    return out
-```
-
-One-off patch:
-```bash
-python - <<'PY'
-import json, pathlib
-p = pathlib.Path("evalplus_validation_results/humaneval/deepseek-ai--deepseek-coder-6.7b-instruct_hf_temp_0.0.jsonl")
-tmp = p.with_suffix(".patched.jsonl")
-with p.open() as fi, tmp.open("w") as fo:
-    for line in fi:
-        if not line.strip(): continue
-        o = json.loads(line)
-        if "response" not in o and "solution" in o: o["response"] = o["solution"]
-        fo.write(json.dumps(o)+"\n")
-tmp.replace(p)
-print("Patched", p)
-PY
-```
 
 **Splits not applied**  
 Ensure your `*_ids.json` is a **JSON array** of **full** task IDs like `"HumanEval/37"`. Numeric IDs (`[0,1,2]`) won’t match unless you normalize them to full keys.
 
 **HF gated models fail to load**  
 Export `HUGGINGFACE_HUB_TOKEN` or create `~/.hf_token`.
-
-**Different GPUs/partitions**  
-Update `#SBATCH --partition` and `--gpus` to match your cluster (e.g., `--gpus=rtx_3090:1`).
 
 ---
 
