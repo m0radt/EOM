@@ -43,16 +43,19 @@ optional_flags=${models_and_settings[$((i + 3))]}
 
 temperature=0.0
 dataset=humaneval
+val_size=10
+random_seed=42
+
 validation_ids_path="splits/${dataset}_split_val_ids.jsonl"
 test_ids_path="splits/${dataset}_split_test_ids.jsonl"
-random_seed=42
-val_size=10
+
 embedding_dir="embeddings"
 validation_root="evalplus_validation_results"
 test_root="evalplus_test_results"
 
 
 echo "Running evaluation for model: $model, backend: $backend, parameters: $param_num B, dataset: $dataset , temperature: $temperature and flags: $optional_flags"
+
 module load anaconda                            ### load anaconda module (must be present when working with conda environments)
 source activate eom                 ### activate a conda environment.
 
@@ -70,7 +73,7 @@ else:
 
 nvidia-smi 
 python split_data.py --dataset $dataset --out_prefix splits/${dataset}_split --val_size $val_size --seed $random_seed
-python embed_model.py --model $model --dataset $dataset --backend $backend --param_num $param_num --embedding_dir $embedding_dir --validation_ids_path $validation_ids_path --root $validation_root $optional_flags
+python embed_model.py --model $model --dataset $dataset --backend $backend --embedding_dir $embedding_dir --validation_ids_path $validation_ids_path --root $validation_root $optional_flags
 # evalplus.evaluate --model $model --dataset $dataset --backend $backend  --temperature $temperature --device_map auto --trust_remote_code True $optional_flags
 nvidia-smi 
 
