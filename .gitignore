@@ -185,5 +185,7 @@ evalplus_results/
 plot_results.py
 calculate_metrics.py
 calculate_perplexity.py
-
 splits/
+embeddings/
+evalplus_validation_results/
+evalplus_test_results/
