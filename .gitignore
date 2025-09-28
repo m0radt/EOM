@@ -189,3 +189,5 @@ splits/
 embeddings/
 evalplus_validation_results/
 evalplus_test_results/
+*.out
+test.py
