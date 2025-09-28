@@ -49,7 +49,7 @@ if __name__ == "__main__":
     parser.add_argument("--backend", "-b", type=str, default="hf", help="Backend to use (default: hf)")
     parser.add_argument("--temperature", "-t", type=float, default=0.0, help="Temperature for sampling (default: 0.0)")
     parser.add_argument("--root", "-r", type=str, default="evalplus_results", help="Directory to save results")
-    parser.add_argument("--validation_ids_path", type=str, required=True, help="Path to validation results JSONL file")
+    parser.add_argument("--validation_ids_path", type=str, required=True, help="Path to validation results JSON file")
     parser.add_argument("--embedding_dir", type=str, default="embeddings", help="Directory to save embeddings")
     
     args = parser.parse_args()
