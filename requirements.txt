@@ -15,6 +15,9 @@ psutil
 scikit-learn
 accelerate
 
+#visualization
+matplotlib
+
 # vllm
 vllm
 
