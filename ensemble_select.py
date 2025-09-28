@@ -41,12 +41,14 @@ def reverse_identifier(identifier: str)-> tuple[str, str, float]:
 
     return model, backend, temperature
 
-def load_embeddings(embedding_dir) -> pd.DataFrame:
+def load_embeddings(df:pd.DataFrame,embedding_dir) -> None:
     """
     Scan `embedding_dir` for */fingerprint.npy.
-    Returns:
-      X: (n_models, d) float32 embedding matrix
-      info: DataFrame with columns [identifier, model, backend, temperature, path]
+    Load them and populate `df` with columns [model_identifier, embedding]
+    Args:
+      df: DataFrame to populate (modified in place)
+      embedding_dir: directory containing subdirs for each model, each with fingerprint.npy
+    Returns: None
     """
     root = Path(embedding_dir)
     model_identifiers: List[str] = []
@@ -78,20 +80,17 @@ def load_embeddings(embedding_dir) -> pd.DataFrame:
     dims = {len(v) for v in embeddings}
     if len(dims) != 1:
         raise ValueError(f"Inconsistent fingerprint dims found: {sorted(dims)}")
+    # populate df
+    df["model_identifier"] = model_identifiers
+    df["embedding"] = embeddings
 
-    df = pd.DataFrame({
-        "model_identifier": model_identifiers,
-        "embedding": embeddings,
-    })
-    return df
-def cluster_models(df:pd.DataFrame, K=3, seed=42):# -> Dict[int, list]:
+def cluster_models(df:pd.DataFrame, K=3, seed=42)-> None:
     """Cluster models based on their embeddings using KMeans.
     Args:
       df: DataFrame with columns [model_identifier, embedding]
       K: number of clusters
       seed: random seed for reproducibility
-    Returns:
-      clusters: dict mapping cluster_id to list of model_identifiers
+    Returns: None (modifies df in place, adding 'cluster' column)
     """
 
     X = np.stack(df['embedding'].to_numpy())
@@ -123,7 +122,8 @@ if __name__ == "__main__":
 
     os.makedirs(args.embedding_dir, exist_ok=True)
 
-    df = load_embeddings(args.embedding_dir)
+    df = pd.DataFrame() 
+    load_embeddings(df, args.embedding_dir)
     print(f"Loaded {len(df)} model embeddings from {args.embedding_dir} (dim {len(df.iloc[0]['embedding'])})")
     
     cluster_models(df, K=2, seed=args.seed)
