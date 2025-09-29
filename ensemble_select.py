@@ -1,6 +1,7 @@
 import os
 
 from pathlib import Path
+import json
 from typing import List, Dict, Any, Tuple
 
 import numpy as np
@@ -41,7 +42,7 @@ def reverse_identifier(identifier: str)-> tuple[str, str, float]:
 
     return model, backend, temperature
 
-def load_embeddings(df:pd.DataFrame,embedding_dir) -> None:
+def load_embeddings(df: pd.DataFrame, embedding_dir)-> None:
     """
     Scan `embedding_dir` for */fingerprint.npy.
     Load them and populate `df` with columns [model_identifier, embedding]
@@ -84,7 +85,7 @@ def load_embeddings(df:pd.DataFrame,embedding_dir) -> None:
     df["model_identifier"] = model_identifiers
     df["embedding"] = embeddings
 
-def cluster_models(df:pd.DataFrame, K=3, seed=42)-> None:
+def cluster_models(df: pd.DataFrame, K=3, seed=42)-> None:
     """Cluster models based on their embeddings using KMeans.
     Args:
       df: DataFrame with columns [model_identifier, embedding]
@@ -98,14 +99,80 @@ def cluster_models(df:pd.DataFrame, K=3, seed=42)-> None:
     labels = kmeans.fit_predict(X)
     df['cluster'] = labels
 
-    # clusters: Dict[int, List[str]] = {}
-    # for label, model_id in zip(labels, df['model_identifier']):
-    #     clusters.setdefault(label, []).append(model_id)
+def load_accuracies(df: pd.DataFrame, results_root: Path, plus: bool=True, k: int=1) -> None:
+    """Load accuracies from a JSON file and optionally add to df in place.
+    Args:
+      results_root: directory containing *.eval_results.json files
+      plus: whether to load 'plus' or 'base' accuracies
+      k: which pass@k to load
+      df: if provided, add 'accuracy' column in place
+    Returns: None (modifies df in place)
+    """
+    accuracies = {}
+    for model_evaluation_path in results_root.glob("*.eval_results.json"):
+        model_identifier = model_evaluation_path.name.replace(".eval_results.json","")
+        with open(model_evaluation_path, 'r') as f:
+            results = json.load(f)
+            accuracy = results["pass_at_k"]["plus" if plus else "base"][f"pass@{k}"]
+        accuracies[model_identifier] = accuracy
 
-    # return clusters
-# def select_representatives(clusters, embs, criterion='medoid') -> List[str]: ...
-# def save_selection(models, output_path): ...
+    df['accuracy'] = df['model_identifier'].map(accuracies)
 
+def select_representatives(df: pd.DataFrame) -> List[str]:
+    """Select representative models from each cluster based on accuracy.
+    Args:
+      df: DataFrame with columns [model_identifier, embedding, cluster, accuracy]
+    Returns: List of selected model_identifiers soreted by accuracy descending
+    """
+    selected_models = []
+    for cluster_id, group in df.groupby('cluster'):
+        # Select model with highest accuracy in the cluster
+        best_model = group.loc[group['accuracy'].idxmax()]['model_identifier']
+        selected_models.append(best_model)
+
+    # Sort selected models by accuracy descending
+    selected_models.sort(key=lambda m: df.loc[df['model_identifier'] == m, 'accuracy'].values[0], reverse=True)
+    return selected_models
+
+def save_selection(models: List[str], output_path: str) -> None:
+    """Save selected model identifiers to a text file."""
+    with open(output_path, 'w') as f:
+        for model in models:
+            f.write(f"{model}\n")
+    print(f"Saved selected models to {output_path}")
+
+def load_selection(input_path: str) -> List[str]:
+    """Load selected model identifiers from a text file."""
+    with open(input_path, 'r') as f:
+        models = [line.strip() for line in f if line.strip()]
+    return models
+
+def simualte_ensemble(models: List[str], results_root: Path, plus: bool=True, k: int=1) -> float:
+    """Simulate ensemble accuracy by averaging accuracies of selected models.
+    Args:
+      models: list of model_identifiers
+      results_root: directory containing *.eval_results.json files
+      plus: whether to load 'plus' or 'base' accuracies
+      k: which pass@k to load
+    Returns: simulated ensemble accuracy
+    """
+    accuracies = []
+    for model in models:
+        model_evaluation_path = results_root / f"{model}.eval_results.json"
+        if not model_evaluation_path.exists():
+            print(f"Warning: Results file not found for model {model}, skipping.")
+            continue
+        with open(model_evaluation_path, 'r') as f:
+            results = json.load(f)
+            accuracy = results["pass_at_k"]["plus" if plus else "base"][f"pass@{k}"]
+            accuracies.append(accuracy)
+
+    if not accuracies:
+        raise ValueError("No valid accuracies found for the selected models.")
+
+    # Simple average as a proxy for ensemble accuracy
+    ensemble_accuracy = sum(accuracies) / len(accuracies)
+    return ensemble_accuracy
 
 
 
@@ -113,7 +180,7 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="Evaluate model on perplexity.")
     parser.add_argument("--dataset", "-d", type=str, default="humaneval", help="Dataset to evaluate on (default: humaneval)")
-    parser.add_argument("--root", "-r", type=str, default="evalplus_results", help="Directory to save results")
+    parser.add_argument("--root", "-r", type=str, default="evalplus_validation_results", help="Directory to save results")
     parser.add_argument("--test_ids_path", type=str, required=True, help="Path to test results JSON file")
     parser.add_argument("--embedding_dir", type=str, default="embeddings", help="Directory to save embeddings")
     parser.add_argument("--seed", type=int, default=42, help="Random seed (default: 42)")
@@ -128,42 +195,40 @@ if __name__ == "__main__":
     
     cluster_models(df, K=2, seed=args.seed)
     print("Clustering done.")
-    print(df.head())
-    # --- Inspect results ---
-    # 1) which models ended up together?
-    cluster_members = (
-        df.sort_values(["cluster","model_identifier"])
-        .groupby("cluster")["model_identifier"].apply(list)
-    )
-    print(cluster_members.to_dict())
+    load_accuracies(df, Path(os.path.join(args.root, args.dataset)), plus=True, k=1)
+    print(df)
+    ensemble_models = select_representatives(df)
+    print("Selected ensemble models:")
+    for m in ensemble_models:
+        acc = df.loc[df["model_identifier"] == m, "accuracy"].values[0]
+        print(f"  {m} (accuracy: {acc})")
 
-    # 2) cluster sizes
-    print(df["cluster"].value_counts().sort_index())
+    # # --- Inspect results ---
+    # # 1) which models ended up together?
+    # cluster_members = (
+    #     df.sort_values(["cluster","model_identifier"])
+    #     .groupby("cluster")["model_identifier"].apply(list)
+    # )
+    # print(cluster_members.to_dict())
 
-    Xp = PCA(n_components=2).fit_transform(df['embedding'].to_list())
+    # # 2) cluster sizes
+    # print(df["cluster"].value_counts().sort_index())
 
-    plt.figure(figsize=(6,6))
-    plt.scatter(Xp[:,0], Xp[:,1], c=df["cluster"])
-    plt.xlabel("PC1"); plt.ylabel("PC2"); plt.title("PCA Embedding Projection")
-    plt.tight_layout()
-    out_path = "embedding_pca.png"
-    Path(args.root).mkdir(parents=True, exist_ok=True)
-    plt.savefig(out_path, dpi=150)
-    plt.close()
-    print(f"Saved plot to {out_path}")
+    # Xp = PCA(n_components=2).fit_transform(df['embedding'].to_list())
+
+    # plt.figure(figsize=(6,6))
+    # plt.scatter(Xp[:,0], Xp[:,1], c=df["cluster"])
+    # plt.xlabel("PC1"); plt.ylabel("PC2"); plt.title("PCA Embedding Projection")
+    # plt.tight_layout()
+    # out_path = "embedding_pca.png"
+    # Path(args.root).mkdir(parents=True, exist_ok=True)
+    # plt.savefig(out_path, dpi=150)
+    # plt.close()
+    # print(f"Saved plot to {out_path}")
 
     
 
 
-    # evaluate(
-    #     model=args.model,
-    #     dataset=args.dataset,
-    #     backend=args.backend,
-    #     greedy=True,
-    #     device_map="auto",
-    #     trust_remote_code=True,
-    #     subset_path=args.test_ids_path,
-    #     root=args.root,
-    #     )
+
     
     
