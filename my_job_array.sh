@@ -22,10 +22,10 @@ echo -e "SLURM_JOB_NODELIST:\t" $SLURM_JOB_NODELIST "\n\n"
 models_and_settings=(
     #      Model_Name                         Backend    Parameter_Count Optional_Flags
     # Salesforce/codegen-6B-multi               hf         6.0              ""
-    # WizardLMTeam/WizardCoder-Python-13B-V1.0  vllm       13.0             ""
+    WizardLMTeam/WizardCoder-Python-13B-V1.0  vllm       13.0             ""
     # meta-llama/CodeLlama-7b-Instruct-hf       hf         6.74             ""
     # meta-llama/CodeLlama-13b-Instruct-hf      hf         13.0             ""
-    deepseek-ai/deepseek-coder-6.7b-instruct  hf         6.7              ""
+    # deepseek-ai/deepseek-coder-6.7b-instruct  hf         6.7              ""
     # TheBloke/Phind-CodeLlama-34B-v1-GPTQ      vllm       34.0             ""
     # meta-llama/Llama-3.2-1B-Instruct          hf         1.24             ""
     #"mistralai/Mixtral-8x7B-Instruct-v0.1"     hf        46.7             ""
@@ -46,8 +46,8 @@ dataset=humaneval
 val_size=10
 random_seed=42
 
-validation_ids_path="splits/${dataset}_split_val_ids.jsonl"
-test_ids_path="splits/${dataset}_split_test_ids.jsonl"
+validation_ids_path="splits/${dataset}_split_val_ids.json"
+test_ids_path="splits/${dataset}_split_test_ids.json"
 
 embedding_dir="embeddings"
 validation_root="evalplus_validation_results"
@@ -81,13 +81,8 @@ nvidia-smi
 
 
 
+# Example commands to run outside the SLURM script:
 
-
-
-
-
-
-
-
-python split_data.py --dataset humaneval --out_prefix splits/humaneval_split --val_size 10 --seed 42
-python embed_model.py --model deepseek-ai/deepseek-coder-6.7b-instruct --dataset humaneval --backend hf  --validation_ids_path splits/humaneval_split_val_ids.json --root evalplus_validation_results
+# python split_data.py --dataset humaneval --out_prefix splits/humaneval_split --val_size 10 --seed 42
+# python embed_model.py --model deepseek-ai/deepseek-coder-6.7b-instruct --dataset humaneval --backend hf  --validation_ids_path splits/humaneval_split_val_ids.json --root evalplus_validation_results
+#python ensemble_select.py --test_ids_path splits/humaneval_split_test_ids.json
