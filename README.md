@@ -280,3 +280,22 @@ python ensemble_select.py --embeddings_dir embeddings --strategy cluster_represe
 ├── ensembles/
 └── evalplus_validation_results/
 ```
+
+
+## ⚖️ EvalPlus — Vendored (Copied) and Modified
+
+This repository includes a **vendored** snapshot of **EvalPlus** to enable validation/test splits friendly evaluation.
+
+**Upstream provenance**
+- Source: https://github.com/evalplus/evalplus
+- Upstream commit: `30f9f8eb2cdddd42906d1fb722756290fe7a1e17`  (copy date: `<2025-09-21>`)
+- Location in this repo: `./evalplus/`
+- License: **MIT** — preserved verbatim at `./evalplus/LICENSE`
+
+**Local modifications**
+- Added dataset **split** support (validation/test):
+  - modified: `evalplus/evaluate.py` (read subset ID files; run selected tasks only)
+  - modified: `evalplus/codegen.py` (plumb subset IDs through codegen loop)
+- Modified `evalplus/provider/hf.py`:
+  - modified: **`evalplus/provider/hf.py`** (Fixed `dtype` key in `kwargs` and improved input handling in `HuggingFaceDecoder`)
+- When **no subset** is provided, behavior matches upstream defaults.
