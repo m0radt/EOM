@@ -4,6 +4,7 @@ from pathlib import Path
 import json
 from typing import List, Dict, Any, Tuple
 
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -11,6 +12,9 @@ import matplotlib.pyplot as plt
 from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
 
+from evalplus.evaluate import evaluate
+
+import time
 
 def reverse_identifier(identifier: str)-> tuple[str, str, float]:
     """
@@ -99,14 +103,14 @@ def cluster_models(df: pd.DataFrame, K=3, seed=42)-> None:
     labels = kmeans.fit_predict(X)
     df['cluster'] = labels
 
-def load_accuracies(df: pd.DataFrame, results_root: Path, plus: bool=True, k: int=1) -> None:
+def load_accuracies(results_root: Path, df: pd.DataFrame=None, plus: bool=True, k: int=1) -> dict[str, float]:
     """Load accuracies from a JSON file and optionally add to df in place.
     Args:
       results_root: directory containing *.eval_results.json files
       plus: whether to load 'plus' or 'base' accuracies
       k: which pass@k to load
       df: if provided, add 'accuracy' column in place
-    Returns: None (modifies df in place)
+    Returns: None (modifies df in place) if df is not None else returns dict of accuracies
     """
     accuracies = {}
     for model_evaluation_path in results_root.glob("*.eval_results.json"):
@@ -116,7 +120,10 @@ def load_accuracies(df: pd.DataFrame, results_root: Path, plus: bool=True, k: in
             accuracy = results["pass_at_k"]["plus" if plus else "base"][f"pass@{k}"]
         accuracies[model_identifier] = accuracy
 
-    df['accuracy'] = df['model_identifier'].map(accuracies)
+    if df is not None:
+        df['accuracy'] = df['model_identifier'].map(accuracies)
+    return accuracies
+    
 
 def select_representatives(df: pd.DataFrame) -> List[str]:
     """Select representative models from each cluster based on accuracy.
@@ -146,33 +153,49 @@ def load_selection(input_path: str) -> List[str]:
     with open(input_path, 'r') as f:
         models = [line.strip() for line in f if line.strip()]
     return models
+def run_evaluation(model_identifiers: List[str], dataset: str, root: str, test_ids_path: str) -> None:
+    for model_identifier in model_identifiers:
+        model, backend, temperature = reverse_identifier(model_identifier)
+        trust_remote_code=False if "deepseek-ai/DeepSeek-Coder-V2-Lite-Instruct" in model else True
+        
+        evaluate(
+            model=model,
+            dataset=dataset,
+            backend=backend,
+            greedy=True,
+            device_map="auto",
+            trust_remote_code=trust_remote_code,
+            subset_path=test_ids_path,
+            root=os.path.join(root, "baseline"),
+            # delete this line if not after
+            # force_base_prompt=True,
+            #-----------------------------
+            )
+        time.sleep(3)  # avoid overloading
 
-def simualte_ensemble(models: List[str], results_root: Path, plus: bool=True, k: int=1) -> float:
-    """Simulate ensemble accuracy by averaging accuracies of selected models.
-    Args:
-      models: list of model_identifiers
-      results_root: directory containing *.eval_results.json files
-      plus: whether to load 'plus' or 'base' accuracies
-      k: which pass@k to load
-    Returns: simulated ensemble accuracy
-    """
-    accuracies = []
-    for model in models:
-        model_evaluation_path = results_root / f"{model}.eval_results.json"
-        if not model_evaluation_path.exists():
-            print(f"Warning: Results file not found for model {model}, skipping.")
-            continue
-        with open(model_evaluation_path, 'r') as f:
-            results = json.load(f)
-            accuracy = results["pass_at_k"]["plus" if plus else "base"][f"pass@{k}"]
-            accuracies.append(accuracy)
+def simualte_ensemble(model_identifiers: List[str], dataset, root, test_ids_path, k: int=1, ensemble_name: str="eom_ensemble") -> None:
+    previous_model = None
+    for i, model_identifier in enumerate(model_identifiers):
+        if i >= k: break
+        model, backend, temperature = reverse_identifier(model_identifier)
+        trust_remote_code=False if "deepseek-ai/DeepSeek-Coder-V2-Lite-Instruct" in model else True
+        
 
-    if not accuracies:
-        raise ValueError("No valid accuracies found for the selected models.")
-
-    # Simple average as a proxy for ensemble accuracy
-    ensemble_accuracy = sum(accuracies) / len(accuracies)
-    return ensemble_accuracy
+        evaluate(
+            model=model,
+            dataset=dataset,
+            backend=backend,
+            greedy=True,
+            device_map="auto",
+            trust_remote_code=trust_remote_code,
+            subset_path=test_ids_path,
+            root=os.path.join(root, ensemble_name),
+            refinement_mode=True,
+            attempt_num=i,
+            previous_model = previous_model,
+            )
+        previous_model = str(model_identifier)
+        time.sleep(3)  # avoid overloading
 
 
 
@@ -180,22 +203,27 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="Evaluate model on perplexity.")
     parser.add_argument("--dataset", "-d", type=str, default="humaneval", help="Dataset to evaluate on (default: humaneval)")
-    parser.add_argument("--root", "-r", type=str, default="evalplus_validation_results", help="Directory to save results")
+    parser.add_argument("--root", "-r", type=str, default="evalplus_results", help="Directory to save results")
+    parser.add_argument("--validation_ids_path", type=str, required=True, help="Path to validation results JSON file")
     parser.add_argument("--test_ids_path", type=str, required=True, help="Path to test results JSON file")
     parser.add_argument("--embedding_dir", type=str, default="embeddings", help="Directory to save embeddings")
     parser.add_argument("--seed", type=int, default=42, help="Random seed (default: 42)")
+    parser.add_argument("--models_num", type=int, default=3, help="Number of models to select for ensemble (default: 3)")
     
     args = parser.parse_args()
 
     os.makedirs(args.embedding_dir, exist_ok=True)
+    validation_root = os.path.join(args.root, "validation")
+    test_root = os.path.join(args.root, "test")
+
 
     df = pd.DataFrame() 
     load_embeddings(df, args.embedding_dir)
     print(f"Loaded {len(df)} model embeddings from {args.embedding_dir} (dim {len(df.iloc[0]['embedding'])})")
     
-    cluster_models(df, K=2, seed=args.seed)
+    cluster_models(df, K=args.models_num, seed=args.seed)
     print("Clustering done.")
-    load_accuracies(df, Path(os.path.join(args.root, args.dataset)), plus=True, k=1)
+    model2accuracy = load_accuracies(Path(os.path.join(validation_root, args.dataset)), df=df, plus=True, k=1)
     print(df)
     ensemble_models = select_representatives(df)
     print("Selected ensemble models:")
@@ -225,6 +253,20 @@ if __name__ == "__main__":
     # plt.savefig(out_path, dpi=150)
     # plt.close()
     # print(f"Saved plot to {out_path}")
+
+
+    print(f"Ensemble models: {ensemble_models}")
+    models = sorted(model2accuracy, key=model2accuracy.get, reverse=True)
+    top_models = models[:args.models_num]
+    best_model_refinement = [ensemble_models[0]]* len(ensemble_models)
+    least_model_ensemble = [ensemble_models[-1]]* len(ensemble_models)
+    # simualte_ensemble(ensemble_models, args.dataset, test_root, args.test_ids_path, k=len(ensemble_models), ensemble_name="eom_ensemble")
+
+    simualte_ensemble(top_models, args.dataset, test_root, args.test_ids_path, k=len(ensemble_models), ensemble_name="top_model_ensemble_new_prompt")
+    # simualte_ensemble(best_model_refinement, args.dataset, test_root, args.test_ids_path, k=len(ensemble_models), ensemble_name="best_model_ensemble")
+    # simualte_ensemble(least_model_ensemble, args.dataset, test_root, args.test_ids_path, k=len(ensemble_models), ensemble_name="least_model_ensemble")
+    # run_evaluation(models, args.dataset, args.root, args.test_ids_path)
+
 
     
 

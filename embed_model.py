@@ -56,6 +56,9 @@ if __name__ == "__main__":
 
 
     os.makedirs(args.embedding_dir, exist_ok=True)
+    validation_root = os.path.join(args.root, "validation")
+
+    trust_remote_code=False if "deepseek-ai/DeepSeek-Coder-V2-Lite-Instruct" in args.model else True
 
     evaluate(
         model=args.model,
@@ -63,14 +66,14 @@ if __name__ == "__main__":
         backend=args.backend,
         greedy=True,
         device_map="auto",
-        trust_remote_code=True,
+        trust_remote_code=trust_remote_code,
         subset_path=args.validation_ids_path,
-        root=args.root,
+        root=validation_root,
         )
     
     identifier = args.model.strip("./").replace("/", "--") + f"_{args.backend}_temp_{args.temperature}"
 
-    responses = load_llm_responses(os.path.join(args.root, args.dataset, identifier+".jsonl"))
+    responses = load_llm_responses(os.path.join(validation_root, args.dataset, identifier+".jsonl"))
     print(f"Loaded {len(responses)} responses from {args.validation_ids_path}")
     model_embedding = compute_model_embedding(responses)
     save_embedding(model_embedding, identifier, args.embedding_dir)

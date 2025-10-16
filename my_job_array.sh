@@ -21,14 +21,18 @@ echo -e "SLURM_JOB_NODELIST:\t" $SLURM_JOB_NODELIST "\n\n"
 
 models_and_settings=(
     #      Model_Name                         Backend    Parameter_Count Optional_Flags
-    # Salesforce/codegen-6B-multi               hf         6.0              ""
-    WizardLMTeam/WizardCoder-Python-13B-V1.0  vllm       13.0             ""
-    # meta-llama/CodeLlama-7b-Instruct-hf       hf         6.74             ""
-    # meta-llama/CodeLlama-13b-Instruct-hf      hf         13.0             ""
     # deepseek-ai/deepseek-coder-6.7b-instruct  hf         6.7              ""
     # TheBloke/Phind-CodeLlama-34B-v1-GPTQ      vllm       34.0             ""
-    # meta-llama/Llama-3.2-1B-Instruct          hf         1.24             ""
-    #"mistralai/Mixtral-8x7B-Instruct-v0.1"     hf        46.7             ""
+    # microsoft/phi-4                         hf         14.7              ""
+    # microsoft/NextCoder-14B              hf         14.0             ""
+    # Qwen/Qwen2.5-Coder-14B-Instruct     hf         14.0             ""
+    # Qwen/Qwen3-8B                  hf         8.0              ""
+    # Qwen/Qwen3-14B                 hf         14.0             ""
+    # google/gemma-2-9b-it           hf       9.0              ""
+    deepseek-ai/DeepSeek-Coder-V2-Lite-Instruct hf         15.7              ""
+    # nvidia/OpenCodeReasoning-Nemotron-14B       hf         14.0             ""
+    # nvidia/NVIDIA-Nemotron-Nano-12B-v2        vllm         12.0              ""
+
 
 )
 
@@ -43,15 +47,14 @@ optional_flags=${models_and_settings[$((i + 3))]}
 
 temperature=0.0
 dataset=humaneval
-val_size=10
+val_size=100
 random_seed=42
 
 validation_ids_path="splits/${dataset}_split_val_ids.json"
 test_ids_path="splits/${dataset}_split_test_ids.json"
 
 embedding_dir="embeddings"
-validation_root="evalplus_validation_results"
-test_root="evalplus_test_results"
+root="evalplus_results"
 
 
 echo "Running evaluation for model: $model, backend: $backend, parameters: $param_num B, dataset: $dataset , temperature: $temperature and flags: $optional_flags"
@@ -72,8 +75,8 @@ else:
 "
 
 nvidia-smi 
-python split_data.py --dataset $dataset --out_prefix splits/${dataset}_split --val_size $val_size --seed $random_seed
-python embed_model.py --model $model --dataset $dataset --backend $backend --embedding_dir $embedding_dir --validation_ids_path $validation_ids_path --root $validation_root $optional_flags
+# python split_data.py --dataset $dataset --out_prefix splits/${dataset}_split --val_size $val_size --seed $random_seed
+python embed_model.py --model $model --dataset $dataset --backend $backend --embedding_dir $embedding_dir --validation_ids_path $validation_ids_path --root $root $optional_flags
 # evalplus.evaluate --model $model --dataset $dataset --backend $backend  --temperature $temperature --device_map auto --trust_remote_code True $optional_flags
 nvidia-smi 
 
@@ -84,5 +87,6 @@ nvidia-smi
 # Example commands to run outside the SLURM script:
 
 # python split_data.py --dataset humaneval --out_prefix splits/humaneval_split --val_size 10 --seed 42
-# python embed_model.py --model deepseek-ai/deepseek-coder-6.7b-instruct --dataset humaneval --backend hf  --validation_ids_path splits/humaneval_split_val_ids.json --root evalplus_validation_results
+# python embed_model.py --model deepseek-ai/deepseek-coder-6.7b-instruct --dataset humaneval --backend hf  --validation_ids_path splits/humaneval_split_val_ids.json --root evalplus_results
 #python ensemble_select.py --test_ids_path splits/humaneval_split_test_ids.json
+# python ensemble_select.py --dataset humaneval --models_num 5 --test_ids_path splits/humaneval_split_test_ids.json --validation_ids_path splits/humaneval_split_val_ids.json  --root evalplus_results 
