@@ -37,8 +37,7 @@ def make_cache(gzip_url, cache_path):
                 plus = f.read().decode("utf-8")
 
         # create CACHE_DIR if not exists
-        if not os.path.exists(CACHE_DIR):
-            os.makedirs(CACHE_DIR)
+        os.makedirs(CACHE_DIR, exist_ok=True)
 
         # Write the original human eval file to CACHE_DIR
         with open(cache_path, "w") as f:

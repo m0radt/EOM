@@ -15,6 +15,7 @@ class DecoderBase(ABC):
         trust_remote_code: bool = False,
         instruction_prefix: str = None,
         response_prefix: str = None,
+        refinement_mode: bool = False,
     ) -> None:
         print("Initializing a decoder model: {} ...".format(name))
         self.name = name
@@ -27,10 +28,11 @@ class DecoderBase(ABC):
         self.trust_remote_code = trust_remote_code
         self.instruction_prefix = instruction_prefix
         self.response_prefix = response_prefix
+        self.refinement_mode = refinement_mode
 
     @abstractmethod
     def codegen(
-        self, prompt: str, do_sample: bool = True, num_samples: int = 200
+        self, prompt: str, previous_solution: str = None, do_sample: bool = True, num_samples: int = 200
     ) -> List[str]:
         pass
 

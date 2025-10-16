@@ -31,6 +31,8 @@ def make_model(
     # gptqmodel only
     gptqmodel_backend: str = "auto",
     gguf_file: str = None,
+    # refinement only
+    refinement_mode: bool = False,
 ) -> DecoderBase:
     if backend == "vllm":
         from evalplus.provider.vllm import VllmDecoder
@@ -49,6 +51,7 @@ def make_model(
             enable_chunked_prefill=enable_chunked_prefill,
             dtype=dtype,
             gguf_file=gguf_file,
+            refinement_mode=refinement_mode,
         )
     elif backend == "hf":
         from evalplus.provider.hf import HuggingFaceDecoder
@@ -66,6 +69,7 @@ def make_model(
             trust_remote_code=trust_remote_code,
             dtype=dtype,
             gguf_file=gguf_file,
+            refinement_mode=refinement_mode,
         )
     elif backend == "openai":
         from evalplus.provider.openai import OpenAIChatDecoder

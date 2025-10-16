@@ -7,6 +7,7 @@ from evalplus.provider.base import DecoderBase
 from evalplus.provider.utility import (
     extra_eos_for_direct_completion,
     make_raw_chat_prompt,
+    make_raw_chat_refinement_prompt,
 )
 
 
@@ -62,7 +63,7 @@ class HuggingFaceDecoder(DecoderBase):
 
     @torch.inference_mode()
     def codegen(
-        self, prompt: str, do_sample: bool = True, num_samples: int = 200
+        self, prompt: str, previous_solution: str = None, do_sample: bool = True, num_samples: int = 200
     ) -> List[str]:
         if self.temperature == 0:
             assert not do_sample
@@ -71,8 +72,14 @@ class HuggingFaceDecoder(DecoderBase):
         prompt = (
             prompt
             if self.is_direct_completion()
-            else make_raw_chat_prompt(
+            else (
+                make_raw_chat_refinement_prompt(
+                prompt, previous_solution, self.instruction_prefix, self.response_prefix, self.tokenizer
+                )
+                if self.refinement_mode and previous_solution is not None
+                else make_raw_chat_prompt(
                 prompt, self.instruction_prefix, self.response_prefix, self.tokenizer
+                )           
             )
         )
         # Build full inputs (with attention mask) and move them to the *model's* device.

@@ -141,6 +141,9 @@ def evaluate(
     num_ctx: Optional[int] = None,
     subset_path: Optional[str] = None, # New argument to filter problems
     root: str = "evalplus_results", # root directory to save results
+    refinement_mode: bool = False,
+    attempt_num: int = 0,
+    previous_model: Optional[str] = None,
     **model_kwargs,
 ):
     if model_kwargs:
@@ -155,6 +158,9 @@ def evaluate(
             num_ctx=num_ctx,
             root=root,
             subset_path=subset_path,
+            attempt_num=attempt_num,
+            refinement_mode=refinement_mode,
+            previous_model=previous_model,
             **model_kwargs,
         )
     assert samples is not None, "No samples provided"

@@ -57,6 +57,52 @@ def make_raw_chat_prompt(
     ).split(_MAGIC_SPLITTER_)[0]
     return task_prompt
 
+def make_raw_chat_refinement_prompt(
+    problem_description: str,
+    previous_solution: str,
+    instruction_prefix: str,
+    response_prefix: str,
+    tokenizer,
+) -> str:
+    assert instruction_prefix is not None, "Instruction prefix is required!"
+    assert response_prefix is not None, "Response prefix is required!"
+
+    user_msg = f"""\
+{instruction_prefix}
+Problem Description:
+```
+{problem_description.strip()}
+```
+
+Previous Solution:
+```python
+{previous_solution.strip()}
+```
+"""
+
+    assistant_seed = f"""\
+{response_prefix}
+```python
+{_MAGIC_SPLITTER_}
+```
+"""
+
+    # If no chat template, fall back to a plain prompt that starts the code block
+    if getattr(tokenizer, "chat_template", None) is None:
+        # Start the assistant code block so generation continues with code immediately.
+        print("Warning: tokenizer has no chat_template; using plain prompt without refinement context.")
+        return f"{user_msg}\n{response_prefix}\n```python\n"
+
+    # With a chat template: apply, then cut everything after the splitter
+    prompt_with_roles = tokenizer.apply_chat_template(
+        [
+            {"role": "user", "content": user_msg},
+            {"role": "assistant", "content": assistant_seed},
+        ],
+        tokenize=False,
+    )
+
+    return prompt_with_roles.split(_MAGIC_SPLITTER_)[0]
 
 def concurrent_call(n, callback, /, *args, **kwargs):
     with ThreadPoolExecutor(max_workers=n) as executor:
