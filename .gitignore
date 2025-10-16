@@ -187,7 +187,9 @@ calculate_metrics.py
 calculate_perplexity.py
 splits/
 embeddings/
-evalplus_validation_results/
-evalplus_test_results/
+merge_results.py
 *.out
 test.py
+delete_list.txt
+notes
+temp_job.sh
