@@ -285,7 +285,7 @@ python ensemble_select.py --dataset humaneval --models_num 5 --test_ids_path spl
 
 ## ⚖️ EvalPlus — Vendored (Copied) and Modified
 
-This repository includes a **vendored** snapshot of **EvalPlus** to enable validation/test splits friendly evaluation.
+This repository includes a **vendored** snapshot of **EvalPlus** to support **split-aware** evaluation (validation/test) and **sequential refinement** mode.
 
 **Upstream provenance**
 - Source: https://github.com/evalplus/evalplus
