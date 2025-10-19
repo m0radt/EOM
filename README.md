@@ -192,9 +192,6 @@ tail -f job-<JOBID>.out
 - **Embeddings**  
   `embeddings/<model>_<backend>_temp_<T>/fingerprint.npy`
 
-- **Ensemble selection output**  
-  `ensembles/selected.json`
-
 ---
 
 ## 6) Ensemble selection (manual run)
@@ -202,11 +199,11 @@ tail -f job-<JOBID>.out
 
 ```bash
 python ensemble_select.py \
-  --embeddings_dir embeddings \
-  --strategy cluster_representatives \
-  --distance cosine \
-  --k 5 \
-  --output ensembles/selected.json
+  --dataset humaneval \
+  --models_num 5 \
+  --test_ids_path splits/humaneval_split_test_ids.json \
+  --validation_ids_path splits/humaneval_split_val_ids.json  \
+  --root evalplus_results 
 ```
 
 ### Dependency method (run after the whole array finishes)
@@ -221,7 +218,7 @@ cat > run_ensemble.sh <<'BASH'
 #SBATCH --output ensemble-%J.out
 module load anaconda
 source activate eom
-python ensemble_select.py --embeddings_dir embeddings --strategy cluster_representatives --distance cosine --k 5 --output ensembles/selected.json
+python ensemble_select.py --dataset humaneval --models_num 5 --test_ids_path splits/humaneval_split_test_ids.json --validation_ids_path splits/humaneval_split_val_ids.json  --root evalplus_results 
 BASH
 sbatch --dependency=afterok:$JID run_ensemble.sh
 ```
@@ -243,6 +240,10 @@ Ensure your `*_ids.json` is a **JSON array** of **full** task IDs like `"HumanEv
 **HF gated models fail to load**  
 Export `HUGGINGFACE_HUB_TOKEN` or create `~/.hf_token`.
 
+**GPU already in use / unexpected CUDA OOM**
+Another process may be holding VRAM. Check and free the GPU:
+- Inspect usage: nvidia-smi (or watch -n2 nvidia-smi) to see PIDs and memory.
+
 ---
 
 ## 8) Quick start
@@ -260,7 +261,7 @@ python split_data.py --dataset humaneval --out_prefix splits/humaneval_split --v
 sbatch --array=0-0 my_job_array.sh
 
 # 4) (if not run inside the array)
-python ensemble_select.py --embeddings_dir embeddings --strategy cluster_representatives --distance cosine --k 5 --output ensembles/selected.json
+python ensemble_select.py --dataset humaneval --models_num 5 --test_ids_path splits/humaneval_split_test_ids.json --validation_ids_path splits/humaneval_split_val_ids.json  --root evalplus_results 
 ```
 
 ---
@@ -293,6 +294,11 @@ This repository includes a **vendored** snapshot of **EvalPlus** to enable valid
 - License: **MIT** — preserved verbatim at `./evalplus/LICENSE`
 
 **Local modifications**
+- Added **sequential refinement simulation (per-model, dataset-wide passes)**:
+  - Runs the **entire dataset with one model**, then proceeds to the **next model** in a specified order.
+  - No per-sample iterative decoding inside a pass; “refinement” is simulated by **sequencing models across full passes**.
+  - Optionally, later passes can **consume outputs from earlier passes** (e.g., prepend prior answers as context) if enabled in your config.
+  - When disabled, behavior matches upstream defaults.
 - Added dataset **split** support (validation/test):
   - modified: `evalplus/evaluate.py` (read subset ID files; run selected tasks only)
   - modified: `evalplus/codegen.py` (plumb subset IDs through codegen loop)
