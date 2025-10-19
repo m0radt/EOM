@@ -191,7 +191,7 @@ def simualte_ensemble(model_identifiers: List[str], dataset, root, test_ids_path
             subset_path=test_ids_path,
             root=os.path.join(root, ensemble_name),
             refinement_mode=True,
-            attempt_num=i,
+            refine_step_num=i,
             previous_model = previous_model,
             )
         previous_model = str(model_identifier)
@@ -262,7 +262,7 @@ if __name__ == "__main__":
     least_model_ensemble = [ensemble_models[-1]]* len(ensemble_models)
     # simualte_ensemble(ensemble_models, args.dataset, test_root, args.test_ids_path, k=len(ensemble_models), ensemble_name="eom_ensemble")
 
-    simualte_ensemble(top_models, args.dataset, test_root, args.test_ids_path, k=len(ensemble_models), ensemble_name="top_model_ensemble_new_prompt")
+    simualte_ensemble(top_models, args.dataset, test_root, args.test_ids_path, k=len(ensemble_models), ensemble_name="top_model_ensemble_new_prompt6")
     # simualte_ensemble(best_model_refinement, args.dataset, test_root, args.test_ids_path, k=len(ensemble_models), ensemble_name="best_model_ensemble")
     # simualte_ensemble(least_model_ensemble, args.dataset, test_root, args.test_ids_path, k=len(ensemble_models), ensemble_name="least_model_ensemble")
     # run_evaluation(models, args.dataset, args.root, args.test_ids_path)

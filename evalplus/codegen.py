@@ -18,7 +18,7 @@ def codegen(
     id_range=None,
     resume=True,
     num_ctx=None,
-    attempt_num: int = 0,
+    refine_step_num: int = 0,
 ):
     print(f"\nUsing model {model.name}")
     print(f"Force_base_prompt {model.force_base_prompt}")
@@ -29,7 +29,7 @@ def codegen(
                 "Chat template is None": model.tokenizer.chat_template is None,
                 "is_direct_completion": model.is_direct_completion(),
                 "refinement_mode is": model.refinement_mode,
-                "attempt_num": attempt_num,
+                "refine_step_num": refine_step_num,
                 "samples_metadata": {},
                 }
     task2nexist = {}
@@ -82,7 +82,7 @@ def codegen(
             sidx = n_samples - n_more_samples
             while sidx < n_samples:
                 prompt = task["prompt"].strip() + "\n"
-                if model.refinement_mode and attempt_num > 0:
+                if model.refinement_mode and refine_step_num > 0:
                     outputs = model.codegen(
                         task["prompt_for_refinement"].strip() + "\n" if model.is_direct_completion() else prompt,
                         task["previous_solution"].strip(),
@@ -99,7 +99,7 @@ def codegen(
                 for impl in outputs:
                     metadata["samples_metadata"][task_id] = {"task_id": task_id,
                                                       "prompt": prompt,
-                                                      "refinement_prompt": task["prompt_for_refinement"].strip() + "\n" if model.refinement_mode and attempt_num > 0 and model.is_direct_completion() else None,
+                                                      "refinement_prompt": task["prompt_for_refinement"].strip() + "\n" if model.refinement_mode and refine_step_num > 0 and model.is_direct_completion() else None,
                                                       "impl": impl,
                                                       }
                     solution = prompt + impl if model.is_direct_completion() else impl
@@ -141,7 +141,7 @@ def codegen(
                     sidx += 1
     # Write to a JSON file
     if model.refinement_mode:
-        with open(os.path.join(os.path.dirname(target_path), f"sample_metadata{attempt_num}.json"), "w") as f:
+        with open(os.path.join(os.path.dirname(target_path), f"sample_metadata{refine_step_num}.json"), "w") as f:
             json.dump(metadata, f, indent=4)
 
 def run_codegen(
@@ -173,7 +173,7 @@ def run_codegen(
     gguf_file: Optional[str] = None,
     subset_path: Optional[str] = None,
     refinement_mode: bool = False,
-    attempt_num: int = 0,
+    refine_step_num: int = 0,
     previous_model: Optional[str] = None,
 ):
     # if refinement_mode: force_base_prompt = True
@@ -189,7 +189,7 @@ def run_codegen(
     if evalperf_type:
         identifier += f"-{evalperf_type}"
     if refinement_mode:
-        target_path = os.path.join(root, dataset, f"refinement_attempt_{attempt_num}", identifier)
+        target_path = os.path.join(root, dataset, f"refinement_attempt_{refine_step_num}", identifier)
     else:
         target_path = os.path.join(root, dataset, identifier)
     if jsonl_fmt:
@@ -216,9 +216,9 @@ def run_codegen(
         filtered = {k: v for k, v in dataset_dict.items() if k in ids}
         dataset_dict = filtered
     
-    if refinement_mode and attempt_num > 0:
+    if refinement_mode and refine_step_num > 0:
         # get the previous attempt results
-        previous_target_path = os.path.join(root, dataset, f"refinement_attempt_{attempt_num-1}", previous_model+".jsonl") if jsonl_fmt else os.path.join(root, dataset, f"refinement_attempt_{attempt_num-1}", previous_model)
+        previous_target_path = os.path.join(root, dataset, f"refinement_attempt_{refine_step_num-1}", previous_model+".jsonl") if jsonl_fmt else os.path.join(root, dataset, f"refinement_attempt_{refine_step_num-1}", previous_model)
         with open(previous_target_path, "r") as f:
             for line in f:
                 if not line.strip():
@@ -326,14 +326,73 @@ def run_codegen(
     os.makedirs(os.path.join(root, dataset), exist_ok=True)
     # Make refinement attempt dir
     if refinement_mode:
-        os.makedirs(os.path.join(root, dataset, f"refinement_attempt_{attempt_num}"), exist_ok=True)
+        os.makedirs(os.path.join(root, dataset, f"refinement_attempt_{refine_step_num}"), exist_ok=True)
 
     # Model instructions
     instruction_prefix = "Please provide a self-contained Python script that solves the following problem in a markdown code block:"
     response_prefix = "Below is a Python script with a self-contained function that solves the problem and passes corresponding tests:"
 
-    if refinement_mode and attempt_num > 0:
+    if refinement_mode and refine_step_num > 0:
         instruction_prefix = """You are given a coding problem and a previous model’s solution to that problem. Produce a single, high-quality final solution by critically evaluating and refining the previous answer. Read the problem carefully, verify correctness against the full specification and edge cases, and fix any bugs, logical gaps, inefficiencies, or omissions. If the approach is sound, keep it while improving clarity, structure, and performance; if it is flawed, replace it with a better implementation. Preserve the required input/output contract and public API of the problem, add any necessary imports, include type hints and a concise docstring when helpful, avoid unnecessary I/O and side effects unless explicitly required, ensure deterministic behavior, and rely only on the Python standard library unless instructed otherwise. The result must be self-contained, executable, and faithful to the specification. Return only the final code; do not include analysis or prose outside the code block."""
+        instruction_prefix = "You are given a coding problem and a previous model’s solution to that problem. Produce a single, high-quality final solution by critically evaluating and refining the previous answer. Refine the previous solution with MINIMAL edits. Keep the public API/signature and any correct behavior. Only change code necessary to satisfy the full spec and edge cases or to improve clarity/performance WITHOUT altering semantics. Your code MUST pass the examples below exactly. Do not add I/O, prints, or a main guard. Deterministic only. Output exactly ONE fenced Python code block containing the final solution—no prose, tests, or extra fences."
+        instruction_prefix = """You are given a coding problem and a previous model’s solution to that problem. Produce a single, high-quality final solution by critically evaluating and refining the previous answer. Read the problem carefully, verify correctness against the full specification and edge cases, and fix any bugs, logical gaps, inefficiencies, or omissions. If the approach is sound, keep it while improving performance; if it is flawed, replace it with a better implementation. Preserve the required input/output contract and public API of the problem, add any necessary imports, include type hints and a concise docstring when helpful, avoid unnecessary I/O and side effects unless explicitly required, ensure deterministic behavior, and rely only on the Python standard library unless instructed otherwise. The result must be self-contained, executable, and faithful to the specification. Return only the final code; do not include analysis or prose outside the code block."""
+        instruction_prefix =("You are given a coding problem and a previous model’s solution. Produce a single, high-quality final solution by critically evaluating and refining the previous answer. "
+                            "Refine the previous solution with MINIMAL edits. Keep the public API/signature and any correct behavior."
+                            "Only change code necessary to satisfy the full spec and edge cases or to improve clarity/performance WITHOUT altering semantics."
+                            "Your code MUST pass the examples below exactly. Do not add I/O, prints, or a main guard. Deterministic only."
+                            "**When correctness and performance conflict, choose correctness, even with a simpler or slower method.**"
+                            "**If the previous approach is fundamentally flawed, you may replace it entirely, but only do so when necessary.**"
+                            "**Silently verify: (1) examples pass, (2) edge cases are handled, (3) signature unchanged, (4) behavior matches the spec, (5) no non-stdlib deps.**"
+                            "Output exactly ONE fenced Python code block containing the final solution—no prose, tests, or extra fences."
+                            )
+        instruction_prefix =("You are given a coding problem and a previous model’s solution. Produce a single, high-quality final solution by critically evaluating and refining the previous answer. "
+                            "Refine the previous solution with MINIMAL edits. Keep the public API/signature and any correct behavior."
+                            "Only change code necessary to satisfy the full spec and edge cases or to improve performance WITHOUT altering semantics."
+                            "Your code MUST pass the examples below exactly. Do not add I/O, prints, or a main guard. Deterministic only."
+                            "**When correctness and performance conflict, choose correctness, even with a simpler or slower method.**"
+                            "**If the previous approach is fundamentally flawed, you may replace it entirely, but only do so when necessary.**"
+                            "**Silently verify: (1) examples pass, (2) edge cases are handled, (3) signature unchanged, (4) behavior matches the spec, (5) no non-stdlib deps.**"
+                            "Output exactly ONE fenced Python code block containing the final solution—no prose, tests, or extra fences."
+                            )
+        instruction_prefix = (
+                            "You are given a coding problem and a previous model’s solution. Produce one final, correct, self-contained Python solution by "
+                            "critically reviewing and MINIMALLY editing the previous answer. Preserve the public API/signature and any correct behavior. "
+                            "Prefer LOCAL edits; avoid renaming identifiers, reordering code, or large rewrites unless necessary for correctness. "
+                            "If you cannot justify the prior approach as fully correct, replace it with a simpler, obviously correct method. "
+                            "Correctness outranks performance; a slower correct method is preferred to a faster incorrect one. "
+                            "Your code MUST satisfy the required examples exactly and adhere to the full specification and edge cases. "
+                            "No I/O, no prints, no `if __name__ == \"__main__\"`, deterministic behavior only, Python standard library only. "
+                            "Include any required imports; add concise type hints and a short docstring if helpful. "
+                            "Silently verify before emitting code: (1) examples pass; (2) edge cases handled (empty, whitespace, large inputs, None if applicable); "
+                            "(3) signature unchanged and API preserved; (4) behavior faithful to the spec; (5) no external dependencies or hidden state. "
+                            "Output exactly ONE fenced Python code block containing only the final solution—no prose, tests, or extra fences."
+                            )
+        instruction_prefix = (
+                            "You are given a coding problem and a previous model’s solution. Produce a single, high-quality final solution by critically evaluating and refining the previous answer. "
+                            "Refine the previous solution with MINIMAL edits. Keep the public API/signature and any correct behavior. "
+                            "Only change code necessary to satisfy the full spec and edge cases or to improve performance WITHOUT altering semantics. "
+                            "Your code MUST pass the examples below exactly **and additional hidden tests used by the grader**. "
+                            "Do not hardcode answers, pattern-match the shown examples, or overfit to specific strings; generalize from the specification. "
+                            "Do not add I/O, prints, or a main guard. Deterministic only. "
+                            "**When correctness and performance conflict, choose correctness, even with a simpler or slower method.** "
+                            "**If the previous approach is fundamentally flawed, you may replace it entirely, but only do so when necessary.** "
+                            "**Silently verify: (1) examples pass, (2) hidden/edge cases are handled, (3) signature unchanged, (4) behavior matches the spec, (5) no non-stdlib deps.** "
+                            "Output exactly ONE fenced Python code block containing the final solution—no prose, tests, or extra fences."
+                        )
+        instruction_prefix = (
+                            "You are given a coding problem and a previous model’s solution. Produce a single, high-quality final solution by critically evaluating and refining the previous answer. "
+                            "Refine the previous solution. Keep the public API/signature and any correct behavior. "
+                            "Only change code necessary to satisfy the full spec and edge cases or to improve performance WITHOUT altering semantics. "
+                            "Your code MUST pass the examples below exactly **and additional hidden tests used by the grader**. "
+                            "Do not hardcode answers, pattern-match the shown examples, or overfit to specific strings; generalize from the specification. "
+                            "Do not add I/O, prints, or a main guard. Deterministic only. "
+                            "**When correctness and performance conflict, choose correctness, even with a simpler or slower method.** "
+                            "**If the previous approach is fundamentally flawed, you may replace it entirely, but only do so when necessary.** "
+                            "**Silently verify: (1) examples pass, (2) hidden/edge cases are handled, (3) signature unchanged, (4) behavior matches the spec, (5) no non-stdlib deps.** "
+                            "Output exactly ONE fenced Python code block containing the final solution—no prose, tests, or extra fences."
+                        )
+
+
         response_prefix = "Below is a refined and improved final Python script with a self-contained function that solves the problem and passes corresponding tests:"
     elif evalperf_type == "perf-instruct":
         instruction_prefix = "Please provide an efficient and self-contained Python script that solves the following problem in a markdown code block:"
@@ -377,7 +436,7 @@ def run_codegen(
         n_samples=n_samples,
         resume=resume,
         id_range=id_range,
-        attempt_num=attempt_num,
+        refine_step_num=refine_step_num,
     )
 
     # force shutdown the model runner

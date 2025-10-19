@@ -142,7 +142,7 @@ def evaluate(
     subset_path: Optional[str] = None, # New argument to filter problems
     root: str = "evalplus_results", # root directory to save results
     refinement_mode: bool = False,
-    attempt_num: int = 0,
+    refine_step_num: int = 0,
     previous_model: Optional[str] = None,
     **model_kwargs,
 ):
@@ -158,7 +158,7 @@ def evaluate(
             num_ctx=num_ctx,
             root=root,
             subset_path=subset_path,
-            attempt_num=attempt_num,
+            refine_step_num=refine_step_num,
             refinement_mode=refinement_mode,
             previous_model=previous_model,
             **model_kwargs,
@@ -345,7 +345,7 @@ def evaluate(
 
     pass_at_k = {
         f"pass@{k}": estimate_pass_at_k(total, base_correct, k).mean()
-        for k in [1, 10, 100]
+        for k in [1, 5, 10, 100]
         if total.min() >= k
     }
     cprint(f"{dataset} (base tests)", "red")
@@ -357,7 +357,7 @@ def evaluate(
         cprint(f"{dataset}+ (base + extra tests)", "green")
         pass_at_k = {
             f"pass@{k}": estimate_pass_at_k(total, np.array(new_correct), k).mean()
-            for k in [1, 10, 100]
+            for k in [1, 5, 10, 100]
             if (total >= k).all()
         }
         for k, v in pass_at_k.items():
